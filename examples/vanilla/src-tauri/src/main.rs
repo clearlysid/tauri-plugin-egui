@@ -23,7 +23,8 @@ fn main() {
       // once we have a Window (or WebviewWindow), pass in a
       // closure that will be called to render the egui UI.
       window.make_egui(|ctx| {
-        egui::Window::new("Hello from Egui!").show(ctx, |ui| {
+        egui::CentralPanel::default().show(ctx, |ui| {
+          ui.heading("Hello from Egui!");
           ui.label("This is rendered natively with egui!");
           ui.separator();
 
