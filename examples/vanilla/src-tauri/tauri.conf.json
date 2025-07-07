@@ -6,16 +6,6 @@
     "frontendDist": "../public"
   },
   "app": {
-    "windows": [
-      {
-        "title": "app",
-        "width": 800,
-        "height": 600,
-        "resizable": true,
-        "fullscreen": false,
-        "transparent": true
-      }
-    ],
     "macOSPrivateApi": true,
     "security": {
       "csp": "default-src blob: data: filesystem: ws: wss: http: https: tauri: 'unsafe-eval' 'unsafe-inline' 'self' img-src: 'self'; connect-src ipc: http://ipc.localhost"

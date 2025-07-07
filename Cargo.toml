@@ -19,6 +19,7 @@ egui-wgpu = "0.30"
 wgpu = "23"
 parking_lot = "0.12"
 raw-window-handle = "0.6"
+anyhow = "1.0.98"
 
 [build-dependencies]
 tauri-plugin = { version = "2.3.0", features = ["build"] }
