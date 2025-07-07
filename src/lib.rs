@@ -1,38 +1,13 @@
+mod renderer;
+
+use anyhow::Error;
+use renderer::Renderer;
 use tauri::{
     plugin::{Builder, TauriPlugin},
     Runtime,
 };
 
-use anyhow::Error;
-
-// Configuration for creating egui windows
-#[derive(Debug, Clone)]
-pub struct EguiWindowConfig {
-    pub title: String,
-    pub width: u32,
-    pub height: u32,
-    pub resizable: bool,
-    pub transparent: bool,
-}
-
-impl Default for EguiWindowConfig {
-    fn default() -> Self {
-        Self {
-            title: "Egui Window".to_string(),
-            width: 800,
-            height: 600,
-            resizable: true,
-            transparent: false,
-        }
-    }
-}
-
-// Re-export egui for convenience
-pub use egui;
-
-mod renderer;
-
-use renderer::Renderer;
+pub use egui; // re-export for convenience
 
 /// Extension trait for Tauri windows to add egui capabilities
 pub trait WindowEguiExt<R: Runtime> {
@@ -93,31 +68,7 @@ impl<R: Runtime> WindowEguiExt<R> for tauri::Window<R> {
         // Finally we render textures, paint jobs, etc. using the GPU
         renderer.render_frame(screen_descriptor, paint_jobs, textures_delta);
 
-        println!(
-            "Made window '{}' egui-enabled (basic implementation)",
-            self.label()
-        );
-        Ok(())
-    }
-}
-
-impl<R: Runtime> WindowEguiExt<R> for tauri::WebviewWindow<R> {
-    fn make_egui<F>(&self, ui_fn: F) -> Result<(), Error>
-    where
-        F: Fn(&egui::Context) + Send + Sync + 'static,
-    {
-        // For now, just run the UI function once to test the API
-        let ctx = egui::Context::default();
-        let raw_input = egui::RawInput::default();
-
-        let _full_output = ctx.run(raw_input, |ctx| {
-            ui_fn(ctx);
-        });
-
-        println!(
-            "Made webview window '{}' egui-enabled (basic implementation)",
-            self.label()
-        );
+        println!("Made window '{}' egui:", self.label());
         Ok(())
     }
 }
