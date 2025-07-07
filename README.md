@@ -4,6 +4,7 @@
 
 This plugin offers a simple way to render some `egui` UI in a Tauri Window (alongside or without a Webview).
 
+<img width="1294" alt="Screenshot 2025-07-07 at 7 19 42 PM" src="https://github.com/user-attachments/assets/c56dcc60-6698-44f5-8941-ff6881e79d93" />
 
 ## Design / Architecture
 
@@ -23,7 +24,7 @@ This plugin offers a simple way to render some `egui` UI in a Tauri Window (alon
 - [x] create example app to explore API design
 - [x] set up egui context
 - [x] make gpu surface and connect to window
-- [ ] render a basic egui UI
+- [x] render a basic egui UI
 - [ ] add support for webview windows
 - [ ] handle basics like input events, resizing, etc.
 - [ ] make rendering backend (wgpu) swappable for glow, etc.
