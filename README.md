@@ -25,7 +25,7 @@ This plugin offers a simple way to render some `egui` UI in a Tauri Window (alon
 - [x] set up egui context
 - [x] make gpu surface and connect to window
 - [x] render a basic egui UI
-- [ ] add support for webview windows
+- [x] add support for webview windows
 - [ ] handle basics like input events, resizing, etc.
 - [ ] make rendering backend (wgpu) swappable for glow, etc.
 
