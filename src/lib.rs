@@ -4,7 +4,7 @@ use anyhow::Error;
 use renderer::Renderer;
 use tauri::{
     plugin::{Builder, TauriPlugin},
-    Runtime,
+    PhysicalSize, Runtime,
 };
 
 pub use egui; // re-export for convenience
@@ -22,23 +22,30 @@ impl<R: Runtime> WindowEguiExt<R> for tauri::Window<R> {
     where
         F: Fn(&egui::Context) + Send + Sync + 'static,
     {
-        // 1. Create egui context
+        // Create egui context + gpu + renderer
         let ctx = egui::Context::default();
-        let raw_input = egui::RawInput::default();
 
-        let inner_size = self.inner_size().unwrap();
-        let (width, height) = (inner_size.width, inner_size.height);
+        let scale_factor = self.scale_factor().unwrap_or(1.0) as f32;
+        ctx.set_zoom_factor(scale_factor);
 
-        // 2. Create GPU renderer
-        // This struct stores the GPU handle and egui-wgpu renderer
-        // Ideally this takes triangles and paints them to window
+        let PhysicalSize { width, height } = self.inner_size()?;
+
+        // TODO: support other renderers (glow?)
         let mut renderer = tauri::async_runtime::block_on(async {
             Renderer::new(self.clone(), width, height).await
         });
 
-        // 3. Run the UI function (which draws actual UI)
-        // This function comes from the tauri app src code
-        // And it is supposed to run every frame
+        // Things below should ideally run in the window's event loop
+        // TODO: figure out how to access tao/wry events for `redraw_requested`
+
+        let raw_input = egui::RawInput::default();
+
+        // Run `ui_fn` (which describes the UI)
+        // This function comes from the tauri app itself and runs every frame.
+        // The `ctx.run()` method processes the inputs and drawings and returns output:
+        // 1. texture info to give to GPU
+        // 2. platform_output to handl events like cursor, copy-paste etc.
+        // 3. pixels_per_point which is the scale factor for rendering
         let egui::FullOutput {
             textures_delta,
             shapes,
@@ -49,26 +56,71 @@ impl<R: Runtime> WindowEguiExt<R> for tauri::Window<R> {
             ui_fn(&ctx);
         });
 
-        // The `.run()` function processes all the drawing and returns
-        // output from the egui context which contains:
-        // - shapes/textures.. to be given to GPU
-        // - platform_output.. to handle events like cursor, copy-paste etc.
-        // - any scale factor changes etc etc.
-
-        // This tesselate method converts all the shapes into triangles
+        // Converts all the shapes into triangles meshes
         let paint_jobs = ctx.tessellate(shapes, pixels_per_point);
 
-        let screen_descriptor = {
-            egui_wgpu::ScreenDescriptor {
-                size_in_pixels: [width, height],
-                pixels_per_point: self.scale_factor().unwrap() as f32,
-            }
+        let screen_descriptor = egui_wgpu::ScreenDescriptor {
+            size_in_pixels: [width, height],
+            pixels_per_point: pixels_per_point,
         };
 
         // Finally we render textures, paint jobs, etc. using the GPU
         renderer.render_frame(screen_descriptor, paint_jobs, textures_delta);
 
-        println!("Made window '{}' egui:", self.label());
+        Ok(())
+    }
+}
+
+impl<R: Runtime> WindowEguiExt<R> for tauri::WebviewWindow<R> {
+    fn make_egui<F>(&self, ui_fn: F) -> Result<(), Error>
+    where
+        F: Fn(&egui::Context) + Send + Sync + 'static,
+    {
+        // Create egui context + gpu + renderer
+        let ctx = egui::Context::default();
+
+        let scale_factor = self.scale_factor().unwrap_or(1.0) as f32;
+        ctx.set_zoom_factor(scale_factor);
+
+        let PhysicalSize { width, height } = self.inner_size()?;
+
+        // TODO: support other renderers (glow?)
+        let mut renderer = tauri::async_runtime::block_on(async {
+            Renderer::new(self.clone(), width, height).await
+        });
+
+        // Things below should ideally run in the window's event loop
+        // TODO: figure out how to access tao/wry events for `redraw_requested`
+
+        let raw_input = egui::RawInput::default();
+
+        // Run `ui_fn` (which describes the UI)
+        // This function comes from the tauri app itself and runs every frame.
+        // The `ctx.run()` method processes the inputs and drawings and returns output:
+        // 1. texture info to give to GPU
+        // 2. platform_output to handl events like cursor, copy-paste etc.
+        // 3. pixels_per_point which is the scale factor for rendering
+        let egui::FullOutput {
+            textures_delta,
+            shapes,
+            pixels_per_point,
+            // platform_output,
+            ..
+        } = ctx.run(raw_input, |ctx| {
+            ui_fn(&ctx);
+        });
+
+        // Converts all the shapes into triangles meshes
+        let paint_jobs = ctx.tessellate(shapes, pixels_per_point);
+
+        let screen_descriptor = egui_wgpu::ScreenDescriptor {
+            size_in_pixels: [width, height],
+            pixels_per_point: pixels_per_point,
+        };
+
+        // Finally we render textures, paint jobs, etc. using the GPU
+        renderer.render_frame(screen_descriptor, paint_jobs, textures_delta);
+
         Ok(())
     }
 }
