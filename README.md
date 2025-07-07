@@ -2,7 +2,7 @@
 
 🚧 **Work in Progress** 🚧
 
-This plugin provides a simple way to render some `egui`-based Rust UI in a Tauri Window (alongside or without a Webview).
+This plugin offers a simple way to render some `egui` UI in a Tauri Window (alongside or without a Webview).
 
 
 ## Design / Architecture
@@ -31,7 +31,7 @@ This plugin provides a simple way to render some `egui`-based Rust UI in a Tauri
 
 ## Goals
 
-For one of my Tauri apps, I need the ability to render `egui` in certain windows. As of today, other supported methods are either outdated/unmaintained or require too much boilerplate code.
+For one of my Tauri apps, I needed to render `egui` in certain windows. As of today, other methods are either outdated/unmaintained or require too much boilerplate code.
 
 [See also](https://github.com/clearlysid/egui-tao?tab=readme-ov-file#goals--motivations)
 
