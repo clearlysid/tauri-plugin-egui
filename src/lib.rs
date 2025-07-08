@@ -12,13 +12,13 @@ pub use egui; // re-export for convenience
 /// Extension trait for Tauri windows to add egui capabilities
 pub trait WindowEguiExt<R: Runtime> {
     /// Convert this window to support egui rendering
-    fn make_egui<F>(&self, ui_fn: F) -> Result<(), Error>
+    fn egui<F>(&self, ui_fn: F) -> Result<(), Error>
     where
         F: Fn(&egui::Context) + Send + Sync + 'static;
 }
 
 impl<R: Runtime> WindowEguiExt<R> for tauri::Window<R> {
-    fn make_egui<F>(&self, ui_fn: F) -> Result<(), Error>
+    fn egui<F>(&self, ui_fn: F) -> Result<(), Error>
     where
         F: Fn(&egui::Context) + Send + Sync + 'static,
     {
@@ -33,7 +33,7 @@ impl<R: Runtime> WindowEguiExt<R> for tauri::Window<R> {
         // TODO: support other renderers (glow?)
         let mut renderer = tauri::async_runtime::block_on(async {
             Renderer::new(self.clone(), width, height).await
-        });
+        })?;
 
         // Things below should ideally run in the window's event loop
         // TODO: figure out how to access tao/wry events for `redraw_requested`
@@ -72,7 +72,7 @@ impl<R: Runtime> WindowEguiExt<R> for tauri::Window<R> {
 }
 
 impl<R: Runtime> WindowEguiExt<R> for tauri::WebviewWindow<R> {
-    fn make_egui<F>(&self, ui_fn: F) -> Result<(), Error>
+    fn egui<F>(&self, ui_fn: F) -> Result<(), Error>
     where
         F: Fn(&egui::Context) + Send + Sync + 'static,
     {
@@ -87,7 +87,7 @@ impl<R: Runtime> WindowEguiExt<R> for tauri::WebviewWindow<R> {
         // TODO: support other renderers (glow?)
         let mut renderer = tauri::async_runtime::block_on(async {
             Renderer::new(self.clone(), width, height).await
-        });
+        })?;
 
         // Things below should ideally run in the window's event loop
         // TODO: figure out how to access tao/wry events for `redraw_requested`

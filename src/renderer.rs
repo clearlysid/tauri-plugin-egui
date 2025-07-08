@@ -1,5 +1,6 @@
 use egui_wgpu::wgpu;
-use egui_wgpu::wgpu::InstanceDescriptor;
+
+use anyhow::Error;
 
 pub struct Renderer {
     gpu: Gpu,
@@ -11,13 +12,13 @@ impl Renderer {
         window: impl Into<wgpu::SurfaceTarget<'static>>,
         width: u32,
         height: u32,
-    ) -> Self {
-        let gpu = Gpu::new_async(window, width, height).await;
+    ) -> Result<Self, Error> {
+        let gpu = Gpu::new_async(window, width, height).await?;
 
         let egui_renderer =
             egui_wgpu::Renderer::new(&gpu.device, gpu.surface_config.format, None, 1, false);
 
-        Self { gpu, egui_renderer }
+        Ok(Self { gpu, egui_renderer })
     }
 
     // pub fn resize(&mut self, width: u32, height: u32) {
@@ -129,9 +130,9 @@ impl Gpu {
         window: impl Into<wgpu::SurfaceTarget<'static>>,
         width: u32,
         height: u32,
-    ) -> Self {
-        let instance = wgpu::Instance::new(InstanceDescriptor::default());
-        let surface = instance.create_surface(window).unwrap();
+    ) -> Result<Self, Error> {
+        let instance = wgpu::Instance::default();
+        let surface = instance.create_surface(window)?;
 
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
@@ -140,7 +141,8 @@ impl Gpu {
                 force_fallback_adapter: false,
             })
             .await
-            .expect("Failed to request adapter!");
+            .ok_or(Error::msg("No adapter found."))?;
+
         let (device, queue) = {
             adapter
                 .request_device(
@@ -152,8 +154,7 @@ impl Gpu {
                     },
                     None,
                 )
-                .await
-                .expect("Failed to request a device!")
+                .await?
         };
 
         let surface_capabilities = surface.get_capabilities(&adapter);
@@ -162,8 +163,24 @@ impl Gpu {
             .formats
             .iter()
             .copied()
-            .find(|f| !f.is_srgb()) // egui wants a non-srgb surface texture
+            .find(|f| {
+                !f.is_srgb() // egui wants a non-srgb surface texture
+                    && matches!(
+                        f,
+                        wgpu::TextureFormat::Rgba8Unorm
+                            | wgpu::TextureFormat::Rgba8UnormSrgb
+                            | wgpu::TextureFormat::Bgra8Unorm
+                            | wgpu::TextureFormat::Bgra8UnormSrgb
+                    )
+            })
             .unwrap_or(surface_capabilities.formats[0]);
+
+        let alpha_mode = surface_capabilities
+            .alpha_modes
+            .iter()
+            .copied()
+            .find(|m| *m != wgpu::CompositeAlphaMode::Opaque)
+            .unwrap_or(surface_capabilities.alpha_modes[0]);
 
         let surface_config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
@@ -171,19 +188,19 @@ impl Gpu {
             width,
             height,
             present_mode: surface_capabilities.present_modes[0],
-            alpha_mode: surface_capabilities.alpha_modes[0],
+            alpha_mode,
             view_formats: vec![],
             desired_maximum_frame_latency: 2,
         };
 
         surface.configure(&device, &surface_config);
 
-        Self {
+        Ok(Self {
             surface,
             device,
             queue,
             surface_config,
             surface_format,
-        }
+        })
     }
 }
