@@ -1,7 +1,7 @@
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use tauri::{WebviewUrl, WebviewWindow};
+use tauri::{WebviewUrl, WebviewWindow, Window};
 use tauri_plugin_egui::WindowEguiExt;
 
 use tauri_plugin_egui::egui; // just a re-export for convenience
@@ -11,18 +11,24 @@ fn main() {
     // .plugin(tauri_plugin_egui::init())
     .setup(|app| {
       // First, create/obtain a Tauri `WebviewWindow`
-      // note: a webview-less `Window` can be created w the `unstable` crate feature
-      let window = WebviewWindow::builder(app, "main", WebviewUrl::App("index.html".into()))
+      // let window = WebviewWindow::builder(app, "main", WebviewUrl::App("index.html".into()))
+      //   .inner_size(600.0, 400.0)
+      //   .title("tauri-plugin-egui demo [with webview]")
+      //   .transparent(true)
+      //   .build()?;
+
+      // A webview-less `Window` can be made w the `unstable` crate feature
+      let only_window = Window::builder(app, "main2")
         .inner_size(600.0, 400.0)
         .title("tauri-plugin-egui demo")
         .transparent(true)
         .build()?;
 
-      // Then,
+      // Then on your Window/WebviewWindow,
       // 1. call `.egui()` on it
       // 2. pass in a closure that gets the `egui::Context`
       // 3. build your UI using `egui` APIs
-      window.egui(|ctx| {
+      only_window.egui(|ctx| {
         egui::CentralPanel::default()
           // .frame(egui::Frame::none().fill(egui::Color32::default()))
           .show(ctx, |ui| {
@@ -37,7 +43,7 @@ fn main() {
 
             ui.horizontal(|ui| {
               ui.label("Counter:");
-              // Note: This is just for demo - in a real app you'd want persistent state
+              // Note: just for demo, in a real app you'd want persistent state
               static mut COUNTER: i32 = 0;
               unsafe {
                 if ui.button("+").clicked() {
