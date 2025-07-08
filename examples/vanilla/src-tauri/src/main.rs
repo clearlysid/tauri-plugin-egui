@@ -2,15 +2,15 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use tauri::{WebviewUrl, WebviewWindow, Window};
-use tauri_plugin_egui::WindowEguiExt;
-
-use tauri_plugin_egui::egui; // just a re-export for convenience
+use tauri_plugin_egui::{egui, EguiPluginBuilder, WindowEguiExt};
 
 fn main() {
   tauri::Builder::default()
-    // .plugin(tauri_plugin_egui::init())
     .setup(|app| {
-      // First, create/obtain a Tauri `WebviewWindow`
+      // First: register the plugin as a `wry_plugin`.
+      app.wry_plugin(EguiPluginBuilder::new(app.handle().to_owned()));
+
+      // Second: create/obtain a Tauri `WebviewWindow`
       // let window = WebviewWindow::builder(app, "main", WebviewUrl::App("index.html".into()))
       //   .inner_size(600.0, 400.0)
       //   .title("tauri-plugin-egui demo [with webview]")
@@ -24,10 +24,9 @@ fn main() {
         .transparent(true)
         .build()?;
 
-      // Then on your Window/WebviewWindow,
-      // 1. call `.egui()` on it
-      // 2. pass in a closure that gets the `egui::Context`
-      // 3. build your UI using `egui` APIs
+      // Third: on your Window/WebviewWindow,
+      // 1. call `.egui()` on it with a closure that takes an `egui::Context`
+      // 2. build your UI using `egui` APIs
       only_window.egui(|ctx| {
         egui::CentralPanel::default()
           // .frame(egui::Frame::none().fill(egui::Color32::default()))
