@@ -1,6 +1,5 @@
-use egui_wgpu::wgpu;
-
 use anyhow::Error;
+use egui_wgpu::wgpu;
 
 pub struct Renderer {
     gpu: Gpu,
@@ -21,9 +20,9 @@ impl Renderer {
         Ok(Self { gpu, egui_renderer })
     }
 
-    // pub fn resize(&mut self, width: u32, height: u32) {
-    //     self.gpu.resize(width, height);
-    // }
+    pub fn resize(&mut self, width: u32, height: u32) {
+        self.gpu.resize(width, height);
+    }
 
     pub fn render_frame(
         &mut self,
@@ -116,15 +115,15 @@ pub struct Gpu {
 }
 
 impl Gpu {
-    // pub fn aspect_ratio(&self) -> f32 {
-    //     self.surface_config.width as f32 / self.surface_config.height.max(1) as f32
-    // }
+    pub fn aspect_ratio(&self) -> f32 {
+        self.surface_config.width as f32 / self.surface_config.height.max(1) as f32
+    }
 
-    // pub fn resize(&mut self, width: u32, height: u32) {
-    //     self.surface_config.width = width;
-    //     self.surface_config.height = height;
-    //     self.surface.configure(&self.device, &self.surface_config);
-    // }
+    pub fn resize(&mut self, width: u32, height: u32) {
+        self.surface_config.width = width;
+        self.surface_config.height = height;
+        self.surface.configure(&self.device, &self.surface_config);
+    }
 
     pub async fn new_async(
         window: impl Into<wgpu::SurfaceTarget<'static>>,
