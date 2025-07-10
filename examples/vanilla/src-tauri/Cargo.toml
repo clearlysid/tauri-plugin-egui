@@ -14,5 +14,5 @@ rust-version = "1.77.2"
 tauri-build = { version = "2.3.0", default-features = false , features = [] }
 
 [dependencies]
-tauri = { version = "2.6.2", features = ["macos-private-api", "unstable"] }
+tauri = { git = "https://github.com/clearlysid/tauri", branch = "patch-pub-runtime-wry", features = ["macos-private-api", "unstable"] }
 tauri-plugin-egui = { path = "../../../" }

@@ -9,9 +9,9 @@ exclude = ["/dist-js", "/guest-js", "/node_modules"]
 links = "tauri-plugin-egui"
 
 [dependencies]
-tauri = { version = "2.6.2" }
-tauri-runtime = { version = "2.6.2" }
-tauri-runtime-wry = { version = "2.6.2" }
+tauri = { git = "https://github.com/clearlysid/tauri", branch = "patch-pub-runtime-wry" }
+tauri-runtime = { git = "https://github.com/clearlysid/tauri", branch = "patch-pub-runtime-wry" }
+tauri-runtime-wry = { git = "https://github.com/clearlysid/tauri", branch = "patch-pub-runtime-wry" }
 raw-window-handle = "0.6"
 anyhow = "1.0.98"
 serde = "1.0"
@@ -21,3 +21,6 @@ egui-wgpu = "0.30"
 
 [build-dependencies]
 tauri-plugin = { version = "2.3.0", features = ["build"] }
+
+[workspace]
+members = ["examples/vanilla/src-tauri"]

@@ -40,18 +40,16 @@ bun tauri dev
 - `egui-wgpu`: Bridge between egui and WGPU
 - `wgpu`: Modern graphics API abstraction
 - `tauri`: Cross-platform app framework
-
-### Integration Flow
-1. Plugin initialized with `tauri_plugin_egui::init()`
-2. Create Tauri window without webview using `Window::builder()`
-3. Call `window.make_egui(ui_fn)` with a closure that defines the UI
-4. Plugin creates egui context, GPU renderer, runs UI function, tessellates shapes, and renders to window
+- `tauri-runtime` and `tauri-runtime-wry`: Low-level event access
 
 ## Example Usage Pattern
-See `examples/vanilla/src-tauri/src/main.rs` for the canonical usage pattern where a window is created without webview and then converted to egui rendering.
+See `examples/vanilla/src-tauri/src/main.rs` for usage pattern where a window is created and then converted to egui rendering.
 
-## Limitations that need to be addressed
+## Reference Crates and Documentation
+- For a comprehensive complete integration, refer to [egui-winit](https://github.com/emilk/egui/tree/main/crates/egui-winit)
+- It supports resizing, input handling, and continuous rendering loops.
+
+## To-do's that are yet to be addressed
 - Only single-frame rendering (no continuous render loop)
 - No input handling
 - No window resizing support
-- Windows with webview are not supported

@@ -106,6 +106,7 @@ impl Renderer {
     }
 }
 
+#[derive(Debug)]
 pub struct Gpu {
     pub surface: wgpu::Surface<'static>,
     pub device: wgpu::Device,

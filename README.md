@@ -6,20 +6,76 @@ This plugin offers a simple way to render some `egui` UI in a Tauri Window (alon
 
 <img width="1294" alt="Screenshot 2025-07-07 at 7 19 42 PM" src="https://github.com/user-attachments/assets/c56dcc60-6698-44f5-8941-ff6881e79d93" />
 
-## Design / Architecture
+### Example Usage
 
-1. Uses `egui`, `egui-wgpu` and `wgpu` dependencies
-2. Expose some traits on Tauri's `Window`/`WebviewWindow` to set up `egui` context
-3. Keeps "bridge" code as minimal as possible
+```rust
+fn main() {
+  tauri::Builder::default()
+    .setup(|app| {
+      // First: register the plugin as a `wry_plugin`.
+      app.wry_plugin(EguiPluginBuilder::new(app.handle().to_owned()));
+
+      // Second: create a Tauri `WebviewWindow` / `Window`
+      Window::builder(app, "main")
+        .inner_size(600.0, 400.0)
+        .title("tauri-plugin-egui demo")
+        .build()?;
+
+      let app_handle = app.handle();
+
+      // Third: mark window as an `egui` target using it's label
+      // Pass in a closure that gets called to render egui.
+      app.handle().start_egui_for_window(
+        "main",
+        Box::new(|ctx| {
+          egui::CentralPanel::default()
+            .show(ctx, |ui| {
+              ui.heading("Hello from Egui!");
+            });
+        }),
+      )?;
+
+      Ok(())
+    })
+    .run(tauri::generate_context!())
+    .expect("error while running tauri application");
+}
+```
 
 ## Development Guide
 
-1. Most plugin source code is in `src/lib.rs` and `src/renderer.rs`
-2. The API example usage is in `examples/vanilla/src-tauri/src/main.rs`
-3. check all the rust code with `cargo check`
-4. run the example app with `bun tauri dev` in the `examples/vanilla` directory
+Most of the source code is in `/src`. We use `egui`, `egui-wgpu`, `wgpu` and (currently) a custom Tauri fork to access some lower-level internals. Effort is being made to merge this into the main Tauri codebase.
+
+There's an example app in `examples/vanilla` demonstrating API usage and easy development.
+
+```
+# to check and verify everything
+cargo check
+
+# to run example app (needs bun installed)
+cd examples/vanilla
+bun tauri dev
+```
+
+
+### Design / Architecture Notes
+
+1. Uses Tauri's `wry_plugin` system to hook into the event loop (diff from regular Tauri plugins)
+2. Tauri maintains control over the Windowing system, `egui` is only used to draw within them.
+3. Uses `wgpu` for hardware-accelerated rendering (can potentially add `glow` support later).
+4. Minimize maintaining "soft forks" and trying to keep the bridge code as small as possible.
+
+### How it works:
+
+1. Plugin tracks all the windows "marked" as `egui` targets in a thread-safe `HashMap`.
+2. For each such Tauri Window:
+  1. we create an egui context, a renderer and a GPU surface.
+  2. we intercept all relevant events (like `RedrawRequested`) to drive egui.
+
 
 ## Progress
+
+This is still a very crude prototype, but making good progress. I will continue working on it as I need this for my own app, [Helmer](https://www.helmer.app). Further improvements will be on a best-effort basis.
 
 - [x] create example app to explore API design
 - [x] set up egui context

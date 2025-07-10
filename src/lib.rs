@@ -1,9 +1,7 @@
 mod plugin;
 mod renderer;
-mod window;
 
-pub use plugin::{EguiPlugin, EguiPluginBuilder};
-pub use window::WindowEguiExt;
+pub use plugin::{AppHandleEguiExt, EguiPlugin, EguiPluginBuilder};
 
 // re-export for convenience
 pub use egui;
