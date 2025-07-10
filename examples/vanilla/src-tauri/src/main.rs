@@ -2,7 +2,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use tauri::{WebviewUrl, WebviewWindow, Window};
-use tauri_plugin_egui::{egui, AppHandleEguiExt, EguiPluginBuilder};
+use tauri_plugin_egui::{egui, EguiAppHandleExt, EguiPluginBuilder};
 
 fn main() {
   tauri::Builder::default()

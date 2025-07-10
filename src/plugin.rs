@@ -12,8 +12,13 @@ use tauri_runtime_wry::tao::event::{Event, WindowEvent as TaoWindowEvent};
 use tauri_runtime_wry::tao::event_loop::{ControlFlow, EventLoopProxy, EventLoopWindowTarget};
 
 use crate::renderer::Renderer;
+use crate::utils::get_label_from_tao_window_id;
 
-// Calling `.wry_plugin()` requires a `.build()` method that returns a plugin
+/// A map of EguiWindow instances, keyed by their Tauri window label.
+type EguiWindowMap = Arc<Mutex<HashMap<String, EguiWindow>>>;
+
+// The builder pattern is mandatorily needed for a Tauri `.wry_plugin()`
+// It sets up the tauri state + offers a hook into the event system
 pub struct EguiPluginBuilder<R: Runtime> {
     app: AppHandle<R>,
 }
@@ -24,33 +29,23 @@ impl<R: Runtime> EguiPluginBuilder<R> {
     }
 }
 
-type EguiWindowMap = Arc<Mutex<HashMap<String, EguiWindow>>>;
-
 impl<T: UserEvent, R: Runtime> PluginBuilder<T> for EguiPluginBuilder<R> {
     type Plugin = EguiPlugin<T>;
 
     fn build(self, _context: Context<T>) -> Self::Plugin {
-        let managed_windows: EguiWindowMap = Arc::new(Mutex::new(HashMap::new()));
-
-        self.app.manage(managed_windows.clone());
-
-        EguiPlugin::new(managed_windows)
+        let egui_window_map: EguiWindowMap = Arc::new(Mutex::new(HashMap::new()));
+        self.app.manage(egui_window_map.clone());
+        EguiPlugin::new(egui_window_map)
     }
 }
 
-/// Meant to be stored in the Tauri state in the AppHandle.
-/// has a map of window labels to their EguiWindow instances.
-// #[derive(Clone)]
 pub struct EguiPlugin<T: UserEvent> {
     windows: EguiWindowMap,
-    _phantom: std::marker::PhantomData<T>,
+    _phantom: std::marker::PhantomData<T>, // this does nothhing, just keeps compiler happy
 }
 
-unsafe impl<T: UserEvent> Send for EguiPlugin<T> {}
-unsafe impl<T: UserEvent> Sync for EguiPlugin<T> {}
-
 impl<T: UserEvent> EguiPlugin<T> {
-    pub fn new(windows: EguiWindowMap) -> Self {
+    fn new(windows: EguiWindowMap) -> Self {
         Self {
             windows,
             _phantom: std::marker::PhantomData,
@@ -72,81 +67,65 @@ impl<T: UserEvent> Plugin<T> for EguiPlugin<T> {
             Event::WindowEvent {
                 event, window_id, ..
             } => {
-                // determine label of window
-                let mapped_id = context
-                    .window_id_map
-                    .get(window_id)
-                    .expect("window id not found");
-                let mw = context.windows.0.borrow();
-                let label = mw.get(&mapped_id).expect("window not found").label.clone();
-
-                let windows = self.windows.lock().unwrap();
-
-                if let Some(egui_win) = windows.get(&label) {
-                    match event {
-                        TaoWindowEvent::Resized(size) => {}
-                        &_ => {
-                            println!("this event isn't handled yet");
+                if let Some(label) = get_label_from_tao_window_id(window_id, &context) {
+                    let mut windows = self.windows.lock().unwrap();
+                    if let Some(egui_win) = windows.get_mut(&label) {
+                        match event {
+                            TaoWindowEvent::Resized(size) => {}
+                            &_ => {
+                                println!("this event isn't handled yet");
+                            }
                         }
                     }
                 }
             }
             Event::RedrawRequested(window_id) => {
-                println!("🎨 RedrawRequested for window: {:?}", window_id);
+                if let Some(label) = get_label_from_tao_window_id(window_id, &context) {
+                    let mut windows = self.windows.lock().unwrap();
+                    if let Some(egui_win) = windows.get_mut(&label) {
+                        // Get the egui context from the EguiWindow
 
-                // determine label of window
-                let mapped_id = context
-                    .window_id_map
-                    .get(window_id)
-                    .expect("window id not found");
-                let mw = context.windows.0.borrow();
-                let label = mw.get(&mapped_id).expect("window not found").label.clone();
+                        let raw_input = egui::RawInput::default();
 
-                let mut windows = self.windows.lock().unwrap();
+                        // Run `ui_fn` (which describes the UI)
+                        // This function comes from the tauri app itself and runs every frame.
+                        // The `ctx.run()` method processes the inputs and drawings and returns output:
+                        // 1. texture info to give to GPU
+                        // 2. platform_output to handl events like cursor, copy-paste etc.
+                        // 3. pixels_per_point which is the scale factor for rendering
+                        let egui::FullOutput {
+                            textures_delta,
+                            shapes,
+                            pixels_per_point,
+                            // platform_output,
+                            ..
+                        } = egui_win.context.run(raw_input, |ctx| {
+                            egui::CentralPanel::default()
+                                .frame(egui::Frame::none().fill(egui::Color32::default()))
+                                .show(ctx, |ui| {
+                                    ui.add_space(28.0);
+                                    ui.heading("Hello from Egui!");
+                                });
+                        });
 
-                if let Some(egui_win) = windows.get_mut(&label) {
-                    // Get the egui context from the EguiWindow
+                        // Converts all the shapes into triangles meshes
+                        let paint_jobs = egui_win.context.tessellate(shapes, pixels_per_point);
 
-                    let raw_input = egui::RawInput::default();
+                        let width = egui_win.size.width;
+                        let height = egui_win.size.height;
 
-                    // Run `ui_fn` (which describes the UI)
-                    // This function comes from the tauri app itself and runs every frame.
-                    // The `ctx.run()` method processes the inputs and drawings and returns output:
-                    // 1. texture info to give to GPU
-                    // 2. platform_output to handl events like cursor, copy-paste etc.
-                    // 3. pixels_per_point which is the scale factor for rendering
-                    let egui::FullOutput {
-                        textures_delta,
-                        shapes,
-                        pixels_per_point,
-                        // platform_output,
-                        ..
-                    } = egui_win.context.run(raw_input, |ctx| {
-                        egui::CentralPanel::default()
-                            // .frame(egui::Frame::none().fill(egui::Color32::default()))
-                            .show(ctx, |ui| {
-                                ui.add_space(28.0);
-                                ui.heading("Hello from Egui!");
-                                ui.label("This is rendered natively with egui!");
-                                ui.separator();
-                            });
-                    });
+                        let screen_descriptor = egui_wgpu::ScreenDescriptor {
+                            size_in_pixels: [width, height],
+                            pixels_per_point: pixels_per_point,
+                        };
 
-                    // Converts all the shapes into triangles meshes
-                    let paint_jobs = egui_win.context.tessellate(shapes, pixels_per_point);
-
-                    let width = egui_win.size.width;
-                    let height = egui_win.size.height;
-
-                    let screen_descriptor = egui_wgpu::ScreenDescriptor {
-                        size_in_pixels: [width, height],
-                        pixels_per_point: pixels_per_point,
-                    };
-
-                    // Finally we render textures, paint jobs, etc. using the GPU
-                    egui_win
-                        .renderer
-                        .render_frame(screen_descriptor, paint_jobs, textures_delta);
+                        // Finally we render textures, paint jobs, etc. using the GPU
+                        egui_win.renderer.render_frame(
+                            screen_descriptor,
+                            paint_jobs,
+                            textures_delta,
+                        );
+                    }
                 }
             }
             &_ => {}
@@ -157,9 +136,8 @@ impl<T: UserEvent> Plugin<T> for EguiPlugin<T> {
     }
 }
 
-/// An egui context, renderer and (optional) UI function
-/// Each of these are needed to render egui UIs in a window
-pub struct EguiWindow {
+/// A collection egui context, renderer and a UI function
+struct EguiWindow {
     context: egui::Context,
     renderer: Renderer,
     size: PhysicalSize<u32>,
@@ -169,7 +147,7 @@ pub struct EguiWindow {
 unsafe impl Send for EguiWindow {}
 unsafe impl Sync for EguiWindow {}
 
-pub trait AppHandleEguiExt {
+pub trait EguiAppHandleExt {
     fn start_egui_for_window(
         &self,
         label: &str,
@@ -177,13 +155,13 @@ pub trait AppHandleEguiExt {
     ) -> Result<(), Error>;
 }
 
-impl AppHandleEguiExt for AppHandle {
+impl EguiAppHandleExt for AppHandle {
     fn start_egui_for_window(
         &self,
         label: &str,
         ui_fn: Box<dyn FnMut(&egui::Context)>,
     ) -> Result<(), Error> {
-        // 0. check if plugin is init'd + if window exists
+        // check if plugin is init'd + if window exists
         let egui_windows = self
             .try_state::<EguiWindowMap>()
             .ok_or(Error::msg("EguiPlugin is not initialized"))?;
@@ -192,32 +170,30 @@ impl AppHandleEguiExt for AppHandle {
             .get_window(label)
             .ok_or(Error::msg("a window for this provided label doesn't exist"))?;
 
-        // 1. extract relevant window deets
+        // extract relevant window deets
         let scale_factor = window.scale_factor().unwrap_or(1.0) as f32;
         let size = window.inner_size()?;
         let PhysicalSize { width, height } = size;
 
-        // 2. create egui context
+        // create egui context + renderer
         let context = egui::Context::default();
         context.set_zoom_factor(scale_factor);
-
-        // 3. create renderer
         let renderer =
             tauri::async_runtime::block_on(
                 async move { Renderer::new(window, width, height).await },
             )?;
 
-        // 4. set up the EguiWindow struct
-        let egui_window = EguiWindow {
-            context,
-            renderer,
-            ui_fn,
-            size,
-        };
-
-        // 5. insert into the plugin state
+        // track in the plugin state
         let mut managed_windows = egui_windows.lock().unwrap();
-        managed_windows.insert(label.to_string(), egui_window);
+        managed_windows.insert(
+            label.to_string(),
+            EguiWindow {
+                context,
+                renderer,
+                ui_fn,
+                size,
+            },
+        );
 
         Ok(())
     }
