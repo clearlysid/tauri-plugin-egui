@@ -1,7 +1,7 @@
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use tauri::{WebviewUrl, WebviewWindow, Window};
+use tauri::{Window};
 use tauri_plugin_egui::{egui, EguiAppHandleExt, EguiPluginBuilder};
 
 fn main() {
@@ -10,15 +10,8 @@ fn main() {
       // First: register the plugin as a `wry_plugin`.
       app.wry_plugin(EguiPluginBuilder::new(app.handle().to_owned()));
 
-      // Second: create/obtain a Tauri `WebviewWindow`/`Window`
-      // WebviewWindow::builder(app, "main", WebviewUrl::App("index.html".into()))
-      //   .inner_size(600.0, 400.0)
-      //   .title("tauri-plugin-egui demo [with webview]")
-      //   .transparent(true)
-      //   .build()?;
-
-      // A webview-less `Window` can be made w the `unstable` crate feature
-      Window::builder(app, "test")
+      // Second: create/obtain a Tauri native `Window` (no webview)
+      Window::builder(app, "main")
         .inner_size(600.0, 400.0)
         .title("tauri-plugin-egui demo")
         .transparent(true)
@@ -26,7 +19,7 @@ fn main() {
         .build()?;
 
       app.handle().start_egui_for_window(
-        "test",
+        "main",
         Box::new(|ctx| {
           egui::CentralPanel::default()
             // .frame(egui::Frame::none().fill(egui::Color32::default()))

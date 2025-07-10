@@ -116,9 +116,10 @@ pub struct Gpu {
 }
 
 impl Gpu {
-    pub fn aspect_ratio(&self) -> f32 {
-        self.surface_config.width as f32 / self.surface_config.height.max(1) as f32
-    }
+    // TODO: what is this used for?
+    // pub fn aspect_ratio(&self) -> f32 {
+    //     self.surface_config.width as f32 / self.surface_config.height.max(1) as f32
+    // }
 
     pub fn resize(&mut self, width: u32, height: u32) {
         self.surface_config.width = width;
