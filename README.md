@@ -21,8 +21,6 @@ fn main() {
         .title("tauri-plugin-egui demo")
         .build()?;
 
-      let app_handle = app.handle();
-
       // Third: mark window as an `egui` target using it's label
       // Pass in a closure that gets called to render egui.
       app.handle().start_egui_for_window(
@@ -44,11 +42,9 @@ fn main() {
 
 ## Development Guide
 
-Most of the source code is in `/src`. We use `egui`, `egui-wgpu`, `wgpu` and (currently) a custom Tauri fork to access some lower-level internals. Effort is being made to merge this into the main Tauri codebase.
+Most of the source code is in `/src`. We use `egui`, `egui-wgpu`, `wgpu` and (currently) a custom Tauri fork to access some lower-level internals. Effort is being made to merge this into the main Tauri codebase. There's an example app in `examples/vanilla` for demonstrating API usage and easy testing.
 
-There's an example app in `examples/vanilla` demonstrating API usage and easy development.
-
-```
+```shell
 # to check and verify everything
 cargo check
 
@@ -67,7 +63,7 @@ bun tauri dev
 
 ### How it works:
 
-1. Plugin tracks all the windows "marked" as `egui` targets in a thread-safe `HashMap`.
+1. Plugin tracks all the windows "marked" as `egui` targets in a thread-safe HashMap.
 2. For each such Tauri Window:
   1. we create an egui context, a renderer and a GPU surface.
   2. we intercept all relevant events (like `RedrawRequested`) to drive egui.
@@ -75,14 +71,14 @@ bun tauri dev
 
 ## Progress
 
-This is still a very crude prototype, but making good progress. I will continue working on it as I need this for my own app, [Helmer](https://www.helmer.app). Further improvements will be on a best-effort basis.
+This is still a very crude prototype. I will continue working on it as I need this for my own app, [Helmer](https://www.helmer.app). Further improvements will be on a best-effort basis.
 
 - [x] create example app to explore API design
 - [x] set up egui context
 - [x] make gpu surface and connect to window
 - [x] render a basic egui UI
 - [x] add support for webview windows
-- [ ] handle basics like input events, resizing, etc.
+- [x] handle basics like input events, resizing, etc.
 - [ ] make rendering backend (wgpu) swappable for glow, etc.
 
 
