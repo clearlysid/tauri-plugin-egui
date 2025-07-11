@@ -1,6 +1,6 @@
 # tauri-plugin-egui [🚧 BETA]
 
-This plugin offers a simple way to render native `egui` UI in a Tauri-managed Window, either alongside or without a Webview.
+A simple way to render native `egui` UI in a Tauri-managed Window, either alongside or without a Webview.
 
 <img width="1294" alt="Screenshot 2025-07-07 at 7 19 42 PM" src="https://github.com/user-attachments/assets/c56dcc60-6698-44f5-8941-ff6881e79d93" />
 
