@@ -1,28 +1,30 @@
-# tauri-plugin-egui
+# tauri-plugin-egui [🚧 BETA]
 
-🚧 **Work in Progress** 🚧
-
-This plugin offers a simple way to render some `egui` UI in a Tauri Window (alongside or without a Webview).
+This plugin offers a simple way to render native `egui` UI in a Tauri-managed Window, either alongside or without a Webview.
 
 <img width="1294" alt="Screenshot 2025-07-07 at 7 19 42 PM" src="https://github.com/user-attachments/assets/c56dcc60-6698-44f5-8941-ff6881e79d93" />
 
 ### Example Usage
 
 ```rust
+// [1] import the necessary traits
+use tauri_plugin_egui::{egui, EguiAppHandleExt, EguiPluginBuilder};
+
 fn main() {
   tauri::Builder::default()
     .setup(|app| {
-      // First: register the plugin as a `wry_plugin`.
+      // [2] register the plugin as a `wry_plugin`.
       app.wry_plugin(EguiPluginBuilder::new(app.handle().to_owned()));
 
-      // Second: create a Tauri `WebviewWindow` / `Window`
+      // [3] make or get a Tauri `WebviewWindow` / `Window`
       Window::builder(app, "main")
         .inner_size(600.0, 400.0)
         .title("tauri-plugin-egui demo")
         .build()?;
 
-      // Third: mark window as an `egui` target using it's label
-      // Pass in a closure that gets called to render egui.
+      // [4]
+      // start egui for a window with its label
+      // pass in a closure that receives the egui::Context
       app.handle().start_egui_for_window(
         "main",
         Box::new(|ctx| {
@@ -42,7 +44,14 @@ fn main() {
 
 ## Development Guide
 
-Most of the source code is in `/src`. We use `egui`, `egui-wgpu`, `wgpu` and (currently) a custom Tauri fork to access some lower-level internals. Effort is being made to merge this into the main Tauri codebase. There's an example app in `examples/vanilla` for demonstrating API usage and easy testing.
+This plugin tracks all the windows marked for `egui` in a thread-safe HashMap. Tauri maintains control over the windowing system and `egui` is only used to draw within them. For each "egui-marked" Tauri window, we create an egui context, a GPU surface and graphics renderer (`wgpu`). And tauri's `wry_plugin` mechanism is used to hook into the event loop and drive all the inputs, etc. that `egui` needs, like `RequestRedraw`.
+
+Notes:
+1. You can have multiple egui-powered windows in the same Tauri app.
+2. We use `wgpu` as graphics backend, but can also consider adding `glow` eventually.
+3. Our approach minimizes needing "soft forks", which was a big pitfall of [tauri-egui](https://github.com/tauri-apps/tauri/discussions/10089#discussion-6836749)
+4. TEMP: a custom tauri fork is needed atm. Effort is being made to merge these changes upstream.
+
 
 ```shell
 # to check and verify everything
@@ -54,24 +63,9 @@ bun tauri dev
 ```
 
 
-### Design / Architecture Notes
-
-1. Uses Tauri's `wry_plugin` system to hook into the event loop (diff from regular Tauri plugins)
-2. Tauri maintains control over the Windowing system, `egui` is only used to draw within them.
-3. Uses `wgpu` for hardware-accelerated rendering (can potentially add `glow` support later).
-4. Minimize maintaining "soft forks" and trying to keep the bridge code as small as possible.
-
-### How it works:
-
-1. Plugin tracks all the windows "marked" as `egui` targets in a thread-safe HashMap.
-2. For each such Tauri Window:
-  1. we create an egui context, a renderer and a GPU surface.
-  2. we intercept all relevant events (like `RedrawRequested`) to drive egui.
-
-
 ## Progress
 
-This is still a very crude prototype. I will continue working on it as I need this for my own app, [Helmer](https://www.helmer.app). Further improvements will be on a best-effort basis.
+I built this as I need the functionality for my own app, [Helmer](https://www.helmer.app). But most further improvements will only be on a best-effort basis. PRs and feedback are always welcome!
 
 - [x] create example app to explore API design
 - [x] set up egui context
@@ -84,9 +78,9 @@ This is still a very crude prototype. I will continue working on it as I need th
 
 ## Goals
 
-For one of my Tauri apps, I needed to render `egui` in certain windows. As of today, other methods are either outdated/unmaintained or require too much boilerplate code.
+I have a (med-large) Tauri app that needs to render UI without the webview-overhead for some cases. egui seemed like it can work well for this. There's been a previous attempt at this by the Tauri team, detailed [here](https://v2.tauri.app/blog/tauri-egui-0-1/) but it has since been de-prioritized due to a large maintainance surface-area. My approach is similar, except that I tried to minimize "fork maintainance" as much as possible.
 
-[See also](https://github.com/clearlysid/egui-tao?tab=readme-ov-file#goals--motivations)
+[See also](https://github.com/clearlysid/egui-tao)
 
 
 ## References
