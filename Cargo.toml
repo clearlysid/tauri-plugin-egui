@@ -15,9 +15,9 @@ tauri-runtime-wry = { git = "https://github.com/clearlysid/tauri", branch = "pat
 raw-window-handle = "0.6"
 anyhow = "1.0.98"
 serde = "1.0"
-wgpu = "23"
-egui = "0.30"
-egui-wgpu = "0.30"
+wgpu = "25"
+egui = "0.32"
+egui-wgpu = "0.32"
 
 [build-dependencies]
 tauri-plugin = { version = "2.3.0", features = ["build"] }

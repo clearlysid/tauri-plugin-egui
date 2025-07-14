@@ -68,6 +68,7 @@ impl Renderer {
                     label: wgpu::Label::default(),
                     aspect: wgpu::TextureAspect::default(),
                     format: Some(self.gpu.surface_format),
+                    usage: None,
                     dimension: None,
                     base_mip_level: 0,
                     mip_level_count: None,
@@ -141,20 +142,17 @@ impl Gpu {
                 compatible_surface: Some(&surface),
                 force_fallback_adapter: false,
             })
-            .await
-            .ok_or(Error::msg("No adapter found."))?;
+            .await?;
 
         let (device, queue) = {
             adapter
-                .request_device(
-                    &wgpu::DeviceDescriptor {
-                        label: Some("WGPU Device"),
-                        memory_hints: wgpu::MemoryHints::default(),
-                        required_features: wgpu::Features::default(),
-                        required_limits: wgpu::Limits::default().using_resolution(adapter.limits()),
-                    },
-                    None,
-                )
+                .request_device(&wgpu::DeviceDescriptor {
+                    label: Some("WGPU Device"),
+                    trace: wgpu::Trace::default(),
+                    memory_hints: wgpu::MemoryHints::default(),
+                    required_features: wgpu::Features::default(),
+                    required_limits: wgpu::Limits::default().using_resolution(adapter.limits()),
+                })
                 .await?
         };
 
