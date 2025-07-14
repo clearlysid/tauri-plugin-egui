@@ -16,7 +16,7 @@ use tauri_runtime_wry::tao::event_loop::{ControlFlow, EventLoopProxy, EventLoopW
 use tauri_runtime_wry::tao::keyboard::Key;
 
 use crate::renderer::Renderer;
-use crate::utils::{get_id_from_tao_window_id, get_label_from_tao_window_id};
+use crate::utils::{get_id_from_tao_id, get_label_from_tao_id};
 
 /// A map of EguiWindow instances, keyed by their Tauri window label.
 type EguiWindowMap = Arc<Mutex<HashMap<String, EguiWindow>>>;
@@ -73,7 +73,7 @@ impl<T: UserEvent> Plugin<T> for EguiPlugin<T> {
             Event::WindowEvent {
                 event, window_id, ..
             } => {
-                if let Some(label) = get_label_from_tao_window_id(window_id, &context) {
+                if let Some(label) = get_label_from_tao_id(window_id, &context) {
                     let mut windows = self.windows.lock().unwrap();
                     if let Some(egui_win) = windows.get_mut(&label) {
                         match event {
@@ -85,7 +85,7 @@ impl<T: UserEvent> Plugin<T> for EguiPlugin<T> {
                             _ => {
                                 let consumed = egui_win.handle_event(event);
 
-                                let win_id = get_id_from_tao_window_id(window_id, &context);
+                                let win_id = get_id_from_tao_id(window_id, &context);
 
                                 // Request redraw after input events to process accumulated events
                                 if let Some(id) = win_id {
@@ -105,7 +105,7 @@ impl<T: UserEvent> Plugin<T> for EguiPlugin<T> {
                 }
             }
             Event::RedrawRequested(window_id) => {
-                if let Some(label) = get_label_from_tao_window_id(window_id, &context) {
+                if let Some(label) = get_label_from_tao_id(window_id, &context) {
                     let mut windows = self.windows.lock().unwrap();
                     if let Some(egui_win) = windows.get_mut(&label) {
                         // Get the egui context from the EguiWindow
