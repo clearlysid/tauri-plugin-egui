@@ -14,7 +14,6 @@ tauri-runtime = { git = "https://github.com/clearlysid/tauri", branch = "patch-p
 tauri-runtime-wry = { git = "https://github.com/clearlysid/tauri", branch = "patch-pub-runtime-wry" }
 raw-window-handle = "0.6"
 anyhow = "1.0.98"
-serde = "1.0"
 wgpu = "25"
 egui = "0.32"
 egui-wgpu = "0.32"

@@ -23,17 +23,17 @@ type EguiWindowMap = Arc<Mutex<HashMap<String, EguiWindow>>>;
 
 // The builder pattern is mandatorily needed for a Tauri `.wry_plugin()`
 // It sets up the tauri state + offers a hook into the event system
-pub struct EguiPluginBuilder {
+pub struct Builder {
     app: AppHandle,
 }
 
-impl EguiPluginBuilder {
+impl Builder {
     pub fn new(app: AppHandle) -> Self {
         Self { app }
     }
 }
 
-impl<T: UserEvent> PluginBuilder<T> for EguiPluginBuilder {
+impl<T: UserEvent> PluginBuilder<T> for Builder {
     type Plugin = EguiPlugin<T>;
 
     fn build(self, _: Context<T>) -> Self::Plugin {
@@ -322,7 +322,7 @@ fn translate_key(key: &Key) -> Option<egui::Key> {
     }
 }
 
-pub trait EguiAppHandleExt {
+pub trait AppHandleExt {
     fn start_egui_for_window(
         &self,
         label: &str,
@@ -330,7 +330,7 @@ pub trait EguiAppHandleExt {
     ) -> Result<(), Error>;
 }
 
-impl EguiAppHandleExt for AppHandle {
+impl AppHandleExt for AppHandle {
     fn start_egui_for_window(
         &self,
         label: &str,

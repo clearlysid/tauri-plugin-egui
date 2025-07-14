@@ -2,13 +2,13 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use tauri::Window;
-use tauri_plugin_egui::{egui, EguiAppHandleExt, EguiPluginBuilder};
+use tauri_plugin_egui::{egui, AppHandleExt};
 
 fn main() {
   tauri::Builder::default()
     .setup(|app| {
-      // First: register the plugin as a `wry_plugin`.
-      app.wry_plugin(EguiPluginBuilder::new(app.handle().to_owned()));
+      // First: initialize it for app using `.wry_plugin()`.
+      app.wry_plugin(tauri_plugin_egui::Builder::new(app.handle().to_owned()));
 
       // Second: create/obtain a Tauri native `Window` (no webview)
       Window::builder(app, "main")
