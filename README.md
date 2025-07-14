@@ -1,8 +1,8 @@
-# tauri-plugin-egui [🚧 BETA]
+# tauri-plugin-egui
 
 A simple way to render native `egui` UI in a Tauri-managed Window, either alongside or without a Webview.
 
-<img width="1294" alt="Screenshot 2025-07-07 at 7 19 42 PM" src="https://github.com/user-attachments/assets/c56dcc60-6698-44f5-8941-ff6881e79d93" />
+<img width="1391" height="760" alt="example tauri app with egui" src="https://github.com/user-attachments/assets/164d6acb-9b5a-4dfe-9fc9-ac60b9a3e421" />
 
 ### Example Usage
 
