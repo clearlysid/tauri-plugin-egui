@@ -17,6 +17,12 @@ pub(crate) fn get_label_from_tao_id<T: UserEvent>(
     tao_id: &TaoWindowId,
     context: &EventLoopIterationContext<'_, T>,
 ) -> Option<String> {
-    get_id_from_tao_id(tao_id, context)
-        .and_then(|id| context.windows.0.borrow().get(&id).map(|ww| ww.label()))
+    get_id_from_tao_id(tao_id, context).and_then(|id| {
+        context
+            .windows
+            .0
+            .borrow()
+            .get(&id)
+            .map(|ww| ww.label().to_string())
+    })
 }
