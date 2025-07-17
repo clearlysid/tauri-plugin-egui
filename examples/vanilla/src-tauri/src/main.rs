@@ -52,8 +52,16 @@ fn main() {
             // Cursor test - hover over different areas to see cursor changes
             ui.label("Hover over different areas to test cursor changes:");
             ui.horizontal(|ui| {
-                ui.selectable_value(&mut false, false, "Clickable text (hand cursor)");
+                // Force hand cursor for this button
+                if ui.add(egui::Button::new("Click me (hand cursor)")).on_hover_cursor(egui::CursorIcon::PointingHand).clicked() {
+                    println!("Button clicked!");
+                }
+                
+                // Force text cursor for this text edit
                 ui.add(egui::TextEdit::singleline(&mut "Edit me".to_string()).hint_text("Type here (text cursor)"));
+                
+                // Force help cursor
+                ui.add(egui::Button::new("Help (?)")).on_hover_cursor(egui::CursorIcon::Help);
             });
 
             ui.separator();

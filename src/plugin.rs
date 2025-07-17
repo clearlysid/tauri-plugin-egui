@@ -4,6 +4,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 use tauri::{AppHandle, Manager, PhysicalSize};
+use tauri_runtime::window::CursorIcon;
 use tauri_runtime::UserEvent;
 
 use tauri_runtime_wry::{Context, PluginBuilder, WindowMessage};
@@ -126,9 +127,9 @@ impl<T: UserEvent> Plugin<T> for EguiPlugin<T> {
                         });
 
                         // Handle platform output (clipboard, cursor, links)
-                        if let Some(window_label) = get_label_from_tao_id(window_id, &context) {
+                        if let Some(win_id) = get_id_from_tao_id(window_id, &context) {
                             if let Err(e) =
-                                egui_win.handle_platform_output(&platform_output, &window_label)
+                                egui_win.handle_platform_output(&platform_output, win_id, &proxy)
                             {
                                 eprintln!("Error handling platform output: {}", e);
                             }
@@ -163,9 +164,6 @@ impl<T: UserEvent> Plugin<T> for EguiPlugin<T> {
                         }
                     }
                 }
-            }
-            Event::MainEventsCleared => {
-                // TODO: Request redraws for all egui windows?
             }
             &_ => {}
         }
@@ -310,13 +308,19 @@ impl EguiWindow {
     fn handle_platform_output(
         &mut self,
         platform_output: &egui::PlatformOutput,
-        _window_label: &str,
+        window_id: tauri_runtime::window::WindowId,
+        proxy: &EventLoopProxy<Message<impl UserEvent>>,
     ) -> Result<(), Error> {
         // Handle cursor changes
         let cursor_icon = platform_output.cursor_icon;
-        // TODO: Set window cursor
-        // For now, just print to console as a placeholder
-        println!("Cursor change requested: {:?}", cursor_icon);
+        let tauri_cursor = egui_cursor_to_tauri_cursor(cursor_icon);
+
+        if let Err(e) = proxy.send_event(Message::Window(
+            window_id,
+            WindowMessage::SetCursorIcon(tauri_cursor),
+        )) {
+            eprintln!("Failed to send cursor message: {}", e);
+        }
 
         // Handle commands (clipboard, URL opening, etc.)
         for command in &platform_output.commands {
@@ -463,6 +467,38 @@ fn translate_physical_key(key: &KeyCode) -> Option<egui::Key> {
         KeyCode::F11 => Some(egui::Key::F11),
         KeyCode::F12 => Some(egui::Key::F12),
         _ => None,
+    }
+}
+
+fn egui_cursor_to_tauri_cursor(egui_cursor: egui::CursorIcon) -> CursorIcon {
+    match egui_cursor {
+        egui::CursorIcon::Default => CursorIcon::Default,
+        egui::CursorIcon::None => CursorIcon::Default, // No equivalent, use default
+        egui::CursorIcon::ContextMenu => CursorIcon::ContextMenu,
+        egui::CursorIcon::Help => CursorIcon::Help,
+        egui::CursorIcon::PointingHand => CursorIcon::Hand,
+        egui::CursorIcon::Progress => CursorIcon::Progress,
+        egui::CursorIcon::Wait => CursorIcon::Wait,
+        egui::CursorIcon::Cell => CursorIcon::Cell,
+        egui::CursorIcon::Crosshair => CursorIcon::Crosshair,
+        egui::CursorIcon::Text => CursorIcon::Text,
+        egui::CursorIcon::VerticalText => CursorIcon::VerticalText,
+        egui::CursorIcon::Alias => CursorIcon::Alias,
+        egui::CursorIcon::Copy => CursorIcon::Copy,
+        egui::CursorIcon::Move => CursorIcon::Move,
+        egui::CursorIcon::NoDrop => CursorIcon::NoDrop,
+        egui::CursorIcon::NotAllowed => CursorIcon::NotAllowed,
+        egui::CursorIcon::Grab => CursorIcon::Grab,
+        egui::CursorIcon::Grabbing => CursorIcon::Grabbing,
+        egui::CursorIcon::AllScroll => CursorIcon::AllScroll,
+        egui::CursorIcon::ResizeHorizontal => CursorIcon::EwResize,
+        egui::CursorIcon::ResizeNeSw => CursorIcon::NeswResize,
+        egui::CursorIcon::ResizeNwSe => CursorIcon::NwseResize,
+        egui::CursorIcon::ResizeVertical => CursorIcon::NsResize,
+        egui::CursorIcon::ZoomIn => CursorIcon::ZoomIn,
+        egui::CursorIcon::ZoomOut => CursorIcon::ZoomOut,
+        // Fallback for any other variants
+        _ => CursorIcon::Default,
     }
 }
 
