@@ -13,7 +13,7 @@ use tauri_runtime_wry::tao::event::{
     ElementState, Event, KeyEvent, MouseButton, MouseScrollDelta, WindowEvent as TaoWindowEvent,
 };
 use tauri_runtime_wry::tao::event_loop::{ControlFlow, EventLoopProxy, EventLoopWindowTarget};
-use tauri_runtime_wry::tao::keyboard::Key;
+use tauri_runtime_wry::tao::keyboard::{Key, KeyCode};
 
 use crate::renderer::Renderer;
 use crate::utils::{get_id_from_tao_id, get_label_from_tao_id};
@@ -63,12 +63,10 @@ impl<T: UserEvent> Plugin<T> for EguiPlugin<T> {
         event: &Event<Message<T>>,
         _event_loop: &EventLoopWindowTarget<Message<T>>,
         proxy: &EventLoopProxy<Message<T>>,
-        control_flow: &mut ControlFlow,
+        _control_flow: &mut ControlFlow,
         context: EventLoopIterationContext<'_, T>,
         _: &WebContextStore,
     ) -> bool {
-        *control_flow = ControlFlow::Poll; // continuous polling for egui responsiveness
-
         match event {
             Event::WindowEvent {
                 event, window_id, ..
@@ -121,11 +119,20 @@ impl<T: UserEvent> Plugin<T> for EguiPlugin<T> {
                             textures_delta,
                             shapes,
                             pixels_per_point,
-                            // platform_output,
+                            platform_output,
                             ..
                         } = egui_win.context.run(raw_input, |ctx| {
                             (egui_win.ui_fn)(ctx);
                         });
+
+                        // Handle platform output (clipboard, cursor, links)
+                        if let Some(window_label) = get_label_from_tao_id(window_id, &context) {
+                            if let Err(e) =
+                                egui_win.handle_platform_output(&platform_output, &window_label)
+                            {
+                                eprintln!("Error handling platform output: {}", e);
+                            }
+                        }
 
                         // Converts all the shapes into triangles meshes
                         let paint_jobs = egui_win.context.tessellate(shapes, pixels_per_point);
@@ -150,10 +157,7 @@ impl<T: UserEvent> Plugin<T> for EguiPlugin<T> {
                             let win_id = get_id_from_tao_id(window_id, &context);
                             if let Some(id) = win_id {
                                 proxy
-                                    .send_event(Message::Window(
-                                        id,
-                                        WindowMessage::RequestRedraw,
-                                    ))
+                                    .send_event(Message::Window(id, WindowMessage::RequestRedraw))
                                     .ok();
                             }
                         }
@@ -181,6 +185,7 @@ struct EguiWindow {
     egui_input: egui::RawInput,
     pointer_pos: Option<egui::Pos2>,
     scale_factor: f32,
+    modifiers: egui::Modifiers,
 }
 
 unsafe impl Send for EguiWindow {}
@@ -196,6 +201,23 @@ impl EguiWindow {
                 );
                 self.pointer_pos = Some(pos);
                 self.egui_input.events.push(egui::Event::PointerMoved(pos));
+                true
+            }
+            TaoWindowEvent::ModifiersChanged(modifiers) => {
+                self.modifiers = egui::Modifiers {
+                    alt: modifiers.alt_key(),
+                    ctrl: modifiers.control_key(),
+                    shift: modifiers.shift_key(),
+                    #[cfg(target_os = "macos")]
+                    mac_cmd: modifiers.super_key(),
+                    #[cfg(target_os = "macos")]
+                    command: modifiers.super_key(),
+                    #[cfg(not(target_os = "macos"))]
+                    mac_cmd: false,
+                    #[cfg(not(target_os = "macos"))]
+                    command: modifiers.control_key(),
+                };
+                self.egui_input.modifiers = self.modifiers;
                 true
             }
             TaoWindowEvent::MouseInput { state, button, .. } => {
@@ -214,7 +236,7 @@ impl EguiWindow {
                     pos,
                     button,
                     pressed,
-                    modifiers: egui::Modifiers::NONE,
+                    modifiers: self.modifiers,
                 });
                 true
             }
@@ -230,7 +252,7 @@ impl EguiWindow {
                 self.egui_input.events.push(egui::Event::MouseWheel {
                     unit: egui::MouseWheelUnit::Point,
                     delta: egui::Vec2::new(x, y),
-                    modifiers: egui::Modifiers::NONE,
+                    modifiers: self.modifiers,
                 });
                 true
             }
@@ -241,19 +263,97 @@ impl EguiWindow {
 
     fn handle_keyboard_event(&mut self, event: &KeyEvent) -> bool {
         let pressed = event.state == ElementState::Pressed;
+        let mut handled = false;
 
-        if let Some(key) = translate_key(&event.logical_key) {
+        // Handle text input from the text field
+        if pressed {
+            if let Some(text) = &event.text {
+                if !text.is_empty() {
+                    // Filter out control characters
+                    let filtered: String = text
+                        .chars()
+                        .filter(|c| !c.is_control() || *c == '\t' || *c == '\n' || *c == '\r')
+                        .collect();
+
+                    if !filtered.is_empty() {
+                        self.egui_input.events.push(egui::Event::Text(filtered));
+                        handled = true;
+                    }
+                }
+            }
+        }
+
+        // Handle key events (logical key first, then physical key fallback)
+        if let Some(key) = translate_logical_key(&event.logical_key) {
             self.egui_input.events.push(egui::Event::Key {
                 key,
                 physical_key: None,
                 pressed,
                 repeat: event.repeat,
-                modifiers: egui::Modifiers::NONE,
+                modifiers: self.modifiers,
             });
-            true
-        } else {
-            false
+            handled = true;
+        } else if let Some(key) = translate_physical_key(&event.physical_key) {
+            self.egui_input.events.push(egui::Event::Key {
+                key,
+                physical_key: None,
+                pressed,
+                repeat: event.repeat,
+                modifiers: self.modifiers,
+            });
+            handled = true;
         }
+
+        handled
+    }
+
+    fn handle_platform_output(
+        &mut self,
+        platform_output: &egui::PlatformOutput,
+        _window_label: &str,
+    ) -> Result<(), Error> {
+        // Handle cursor changes
+        let cursor_icon = platform_output.cursor_icon;
+        // TODO: Set window cursor
+        // For now, just print to console as a placeholder
+        println!("Cursor change requested: {:?}", cursor_icon);
+
+        // Handle commands (clipboard, URL opening, etc.)
+        for command in &platform_output.commands {
+            match command {
+                egui::output::OutputCommand::CopyText(text) => {
+                    // TODO: Set clipboard content
+                    // For now, just print to console as a placeholder
+                    println!("Clipboard copy text requested: {}", text);
+                }
+                egui::output::OutputCommand::CopyImage(image) => {
+                    // TODO: Set clipboard image content
+                    // For now, just print to console as a placeholder
+                    println!(
+                        "Clipboard copy image requested: {}x{}",
+                        image.width(),
+                        image.height()
+                    );
+                }
+                egui::output::OutputCommand::OpenUrl(url) => {
+                    // TODO: Open URL in default browser
+                    // For now, just print to console as a placeholder
+                    println!(
+                        "URL open requested: {} (target: {:?})",
+                        url.url, url.new_tab
+                    );
+                }
+            }
+        }
+
+        // Handle IME (Input Method Editor) positioning
+        if let Some(ime_pos) = platform_output.ime {
+            // TODO: Set IME position
+            // For now, just print to console as a placeholder
+            println!("IME position requested: {:?}", ime_pos);
+        }
+
+        Ok(())
     }
 
     fn take_egui_input(&mut self) -> egui::RawInput {
@@ -270,7 +370,7 @@ impl EguiWindow {
     }
 }
 
-fn translate_key(key: &Key) -> Option<egui::Key> {
+fn translate_logical_key(key: &Key) -> Option<egui::Key> {
     match key {
         Key::Character(ch) => {
             let ch = ch.chars().next()?;
@@ -333,6 +433,39 @@ fn translate_key(key: &Key) -> Option<egui::Key> {
     }
 }
 
+fn translate_physical_key(key: &KeyCode) -> Option<egui::Key> {
+    match key {
+        KeyCode::ArrowDown => Some(egui::Key::ArrowDown),
+        KeyCode::ArrowLeft => Some(egui::Key::ArrowLeft),
+        KeyCode::ArrowRight => Some(egui::Key::ArrowRight),
+        KeyCode::ArrowUp => Some(egui::Key::ArrowUp),
+        KeyCode::Escape => Some(egui::Key::Escape),
+        KeyCode::Tab => Some(egui::Key::Tab),
+        KeyCode::Backspace => Some(egui::Key::Backspace),
+        KeyCode::Delete => Some(egui::Key::Delete),
+        KeyCode::Enter => Some(egui::Key::Enter),
+        KeyCode::Space => Some(egui::Key::Space),
+        KeyCode::Insert => Some(egui::Key::Insert),
+        KeyCode::Home => Some(egui::Key::Home),
+        KeyCode::End => Some(egui::Key::End),
+        KeyCode::PageUp => Some(egui::Key::PageUp),
+        KeyCode::PageDown => Some(egui::Key::PageDown),
+        KeyCode::F1 => Some(egui::Key::F1),
+        KeyCode::F2 => Some(egui::Key::F2),
+        KeyCode::F3 => Some(egui::Key::F3),
+        KeyCode::F4 => Some(egui::Key::F4),
+        KeyCode::F5 => Some(egui::Key::F5),
+        KeyCode::F6 => Some(egui::Key::F6),
+        KeyCode::F7 => Some(egui::Key::F7),
+        KeyCode::F8 => Some(egui::Key::F8),
+        KeyCode::F9 => Some(egui::Key::F9),
+        KeyCode::F10 => Some(egui::Key::F10),
+        KeyCode::F11 => Some(egui::Key::F11),
+        KeyCode::F12 => Some(egui::Key::F12),
+        _ => None,
+    }
+}
+
 pub trait AppHandleExt {
     fn start_egui_for_window(
         &self,
@@ -383,6 +516,7 @@ impl AppHandleExt for AppHandle {
                 egui_input: egui::RawInput::default(),
                 pointer_pos: None,
                 scale_factor,
+                modifiers: egui::Modifiers::NONE,
             },
         );
 
