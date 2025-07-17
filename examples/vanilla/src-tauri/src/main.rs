@@ -1,6 +1,7 @@
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+use std::time::Instant;
 use tauri::Window;
 use tauri_plugin_egui::{egui, AppHandleExt};
 
@@ -45,6 +46,23 @@ fn main() {
                 }
               }
             });
+
+            ui.separator();
+
+            // Timer demonstration - shows continuous rendering
+            static mut START_TIME: Option<Instant> = None;
+            unsafe {
+              if START_TIME.is_none() {
+                START_TIME = Some(Instant::now());
+              }
+              if let Some(start) = START_TIME {
+                let elapsed = start.elapsed().as_secs_f32();
+                ui.label(format!("Timer: {:.1}s", elapsed));
+
+                // Request repaint to keep the timer updating
+                ctx.request_repaint();
+              }
+            }
           });
         }),
       )?;

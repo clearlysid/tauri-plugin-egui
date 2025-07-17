@@ -45,7 +45,7 @@ impl<T: UserEvent> PluginBuilder<T> for Builder {
 
 pub struct EguiPlugin<T: UserEvent> {
     windows: EguiWindowMap,
-    _phantom: std::marker::PhantomData<T>, // this does nothhing, just keeps compiler happy
+    _phantom: std::marker::PhantomData<T>, // this does nothing, just keeps compiler happy
 }
 
 impl<T: UserEvent> EguiPlugin<T> {
@@ -125,8 +125,6 @@ impl<T: UserEvent> Plugin<T> for EguiPlugin<T> {
                             ..
                         } = egui_win.context.run(raw_input, |ctx| {
                             (egui_win.ui_fn)(ctx);
-                            // Request continuous repaints to keep the UI responsive
-                            ctx.request_repaint();
                         });
 
                         // Converts all the shapes into triangles meshes
@@ -146,6 +144,19 @@ impl<T: UserEvent> Plugin<T> for EguiPlugin<T> {
                             paint_jobs,
                             textures_delta,
                         );
+
+                        // Check if egui wants us to repaint and request another redraw
+                        if egui_win.context.has_requested_repaint() {
+                            let win_id = get_id_from_tao_id(window_id, &context);
+                            if let Some(id) = win_id {
+                                proxy
+                                    .send_event(Message::Window(
+                                        id,
+                                        WindowMessage::RequestRedraw,
+                                    ))
+                                    .ok();
+                            }
+                        }
                     }
                 }
             }
