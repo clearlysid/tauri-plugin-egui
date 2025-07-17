@@ -49,6 +49,15 @@ fn main() {
 
             ui.separator();
 
+            // Cursor test - hover over different areas to see cursor changes
+            ui.label("Hover over different areas to test cursor changes:");
+            ui.horizontal(|ui| {
+                ui.selectable_value(&mut false, false, "Clickable text (hand cursor)");
+                ui.add(egui::TextEdit::singleline(&mut "Edit me".to_string()).hint_text("Type here (text cursor)"));
+            });
+
+            ui.separator();
+
             // Timer demonstration - shows continuous rendering
             static mut START_TIME: Option<Instant> = None;
             unsafe {
