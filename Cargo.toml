@@ -9,9 +9,9 @@ exclude = ["/dist-js", "/guest-js", "/node_modules"]
 links = "tauri-plugin-egui"
 
 [dependencies]
-tauri = { git = "https://github.com/clearlysid/tauri", branch = "patch-pub-runtime-wry" }
-tauri-runtime = { git = "https://github.com/clearlysid/tauri", branch = "patch-pub-runtime-wry" }
-tauri-runtime-wry = { git = "https://github.com/clearlysid/tauri", branch = "patch-pub-runtime-wry" }
+tauri = "2.7.0"
+tauri-runtime = "2.7.1"
+tauri-runtime-wry = "2.7.2"
 anyhow = "1.0.98"
 wgpu = "25"
 egui = "0.32"

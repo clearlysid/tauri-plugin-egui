@@ -11,8 +11,8 @@ rust-version = "1.77.2"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [build-dependencies]
-tauri-build = { version = "2.3.0", default-features = false , features = [] }
+tauri-build = { version = "2.3.1", default-features = false , features = [] }
 
 [dependencies]
-tauri = { git = "https://github.com/clearlysid/tauri", branch = "patch-pub-runtime-wry", features = ["macos-private-api", "unstable"] }
+tauri = { version = "2.7.0", features = ["macos-private-api", "unstable"] }
 tauri-plugin-egui = { path = "../../../" }
