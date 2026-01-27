@@ -2,6 +2,7 @@
 name = "tauri-plugin-egui"
 version = "0.1.0"
 authors = [ "Siddharth <siddharth99c@gmail.com>" ]
+license = "MIT"
 description = ""
 edition = "2021"
 rust-version = "1.77.2"
