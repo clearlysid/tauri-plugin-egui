@@ -15,7 +15,12 @@ impl Renderer {
         let gpu = Gpu::new_async(window, width, height).await?;
 
         let egui_renderer =
-            egui_wgpu::Renderer::new(&gpu.device, gpu.surface_config.format, None, 1, false);
+            egui_wgpu::Renderer::new(
+                &gpu.device,
+                gpu.surface_config.format,
+                egui_wgpu::RendererOptions::default(),
+            );
+            //egui_wgpu::Renderer::new(&gpu.device, gpu.surface_config.format, None, 1, false);
 
         Ok(Self { gpu, egui_renderer })
     }
@@ -85,6 +90,7 @@ impl Renderer {
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                     view: &surface_texture_view,
                     resolve_target: None,
+                    depth_slice: None,
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
                         store: wgpu::StoreOp::Store,
@@ -149,6 +155,7 @@ impl Gpu {
                 .request_device(&wgpu::DeviceDescriptor {
                     label: Some("WGPU Device"),
                     trace: wgpu::Trace::default(),
+                    experimental_features: wgpu::ExperimentalFeatures::default(),
                     memory_hints: wgpu::MemoryHints::default(),
                     required_features: wgpu::Features::default(),
                     required_limits: wgpu::Limits::default().using_resolution(adapter.limits()),

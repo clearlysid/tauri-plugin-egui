@@ -82,6 +82,9 @@ fn main() {
             }
           });
         }),
+        Some(Box::new(|label| {
+          println!("Window '{}' is being destroyed!", label);
+        })),
       )?;
 
       Ok(())

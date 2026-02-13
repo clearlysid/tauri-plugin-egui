@@ -13,9 +13,11 @@ tauri = "2.7.0"
 tauri-runtime = "2.7.1"
 tauri-runtime-wry = "2.7.2"
 anyhow = "1.0.98"
-wgpu = "25"
-egui = "0.32"
-egui-wgpu = "0.32"
+wgpu = "27.0.1"
+egui = "0.33"
+egui-wgpu = "0.33"
+rdev = { git = "ssh://git@github.com/jason-ni/rdev.git" }
+serde = { version = "1", features = ["derive"] }
 
 [build-dependencies]
 tauri-plugin = { version = "2.3.0", features = ["build"] }

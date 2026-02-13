@@ -1,9 +1,10 @@
 use anyhow::Error;
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, atomic::{AtomicBool, Ordering}};
 use std::time::Instant;
+use serde::{Deserialize, Serialize};
 
-use tauri::{AppHandle, Manager, PhysicalSize};
+use tauri::{AppHandle, Manager, PhysicalSize, Emitter, Listener};
 use tauri_runtime::window::CursorIcon;
 use tauri_runtime::UserEvent;
 
@@ -22,6 +23,18 @@ use crate::utils::{get_id_from_tao_id, get_label_from_tao_id};
 /// A map of EguiWindow instances, keyed by their Tauri window label.
 type EguiWindowMap = Arc<Mutex<HashMap<String, EguiWindow>>>;
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WheelEvent {
+    pub delta_x: i64,
+    pub delta_y: i64,
+}
+
+pub struct StagingWindowWrapper {
+    pub window: Option<(String, EguiWindow)>,
+}
+
+type StagingWindow = Arc<Mutex<StagingWindowWrapper>>;
+
 // The builder pattern is mandatorily needed for a Tauri `.wry_plugin()`
 // It sets up the tauri state + offers a hook into the event system
 pub struct Builder {
@@ -39,20 +52,30 @@ impl<T: UserEvent> PluginBuilder<T> for Builder {
 
     fn build(self, _: Context<T>) -> Self::Plugin {
         let egui_window_map: EguiWindowMap = Arc::new(Mutex::new(HashMap::new()));
+        let staging_window: StagingWindow = Arc::new(Mutex::new(StagingWindowWrapper { window: None }));
         self.app.manage(egui_window_map.clone());
-        EguiPlugin::new(egui_window_map)
+        self.app.manage(staging_window.clone());
+        EguiPlugin::new(self.app.clone(), staging_window, egui_window_map)
     }
 }
 
 pub struct EguiPlugin<T: UserEvent> {
+    app: AppHandle,
+    staging_window: StagingWindow,
     windows: EguiWindowMap,
+    is_rdev_loop_running: Arc<AtomicBool>,
+    rdev_thread_join_handle: Option<std::thread::JoinHandle<()>>,
     _phantom: std::marker::PhantomData<T>, // this does nothing, just keeps compiler happy
 }
 
 impl<T: UserEvent> EguiPlugin<T> {
-    fn new(windows: EguiWindowMap) -> Self {
+    fn new(app: AppHandle,staging_window: StagingWindow, windows: EguiWindowMap) -> Self {
         Self {
+            app,
+            staging_window,
             windows,
+            is_rdev_loop_running: Arc::new(AtomicBool::new(false)),
+            rdev_thread_join_handle: None,
             _phantom: std::marker::PhantomData,
         }
     }
@@ -68,18 +91,83 @@ impl<T: UserEvent> Plugin<T> for EguiPlugin<T> {
         context: EventLoopIterationContext<'_, T>,
         _: &WebContextStore,
     ) -> bool {
+        if let Event::LoopDestroyed = event {
+            self.is_rdev_loop_running.store(false, Ordering::SeqCst);
+
+            println!("==== we got loop destroyed, waiting for the rdev thread to join ====");
+            if let Some(handle) = self.rdev_thread_join_handle.take() {
+                let _ = handle.join(); 
+            }
+            return false;
+        }
+
+
         match event {
             Event::WindowEvent {
                 event, window_id, ..
             } => {
+
                 if let Some(label) = get_label_from_tao_id(window_id, &context) {
+                    // we inject a rdev event loop to handle other app window's events
+                    if let Some(win_id) = get_id_from_tao_id(window_id, &context) {
+                        if !self.is_rdev_loop_running.load(Ordering::SeqCst) {
+                            let redraw_proxy = proxy.clone();
+                            self.is_rdev_loop_running.store(true, Ordering::SeqCst);
+                            let is_rdev_loop_running = self.is_rdev_loop_running.clone();
+                            let rdev_app_handle = self.app.clone();
+                            let redraw_app_handle = self.app.clone();
+                            let handle = std::thread::spawn(move || {
+                                if let Err(e) = rdev::listen(move |event| {
+                                    if !is_rdev_loop_running.load(Ordering::SeqCst) {
+                                        return;
+                                    }
+                                    if let rdev::EventType::Wheel { delta_x, delta_y } = event.event_type {
+                                        let _ = rdev_app_handle.emit("global_wheel_event", WheelEvent { delta_x, delta_y });
+                                    }
+                                }) {
+                                    eprintln!("Error listening to rdev events: {:?}", e);
+                                }
+                            });
+                            self.rdev_thread_join_handle = Some(handle);
+
+                            // we let the up layer logic to request redraw when needed
+                            std::thread::spawn(move || {
+                                redraw_app_handle.listen("egui_redraw", move |_| {
+                                    let _ = redraw_proxy.send_event(
+                                        Message::Window(win_id, WindowMessage::RequestRedraw),
+                                    );
+
+                                });
+                            });
+                        }
+                    }
+
                     let mut windows = self.windows.lock().unwrap();
+                    if !windows.contains_key(&label) {
+                        let mut staging_window = self.staging_window.lock().unwrap();
+                        let staging_lable_opt = staging_window.window.as_ref()
+                            .map(|(l, _w)| l.clone());
+                        if let Some(staging_label) = staging_lable_opt {
+                            if label == staging_label {
+                                // extract the window from the staging window
+                                let (label, window) = staging_window.window.take().unwrap();
+                                windows.insert(label, window);
+                            } 
+                        }
+                    }
                     if let Some(egui_win) = windows.get_mut(&label) {
                         match event {
                             TaoWindowEvent::Resized(size) => {
                                 egui_win.size = PhysicalSize::new(size.width, size.height);
                                 egui_win.renderer.resize(size.width, size.height);
                                 return true;
+                            }
+                            TaoWindowEvent::Destroyed => {
+                                if let Some(mut on_destroy) = egui_win.on_destroy.take() {
+                                    on_destroy(label.clone());
+                                }
+                                windows.remove(&label);
+                                return false;
                             }
                             _ => {
                                 let consumed = egui_win.handle_event(event);
@@ -106,6 +194,18 @@ impl<T: UserEvent> Plugin<T> for EguiPlugin<T> {
             Event::RedrawRequested(window_id) => {
                 if let Some(label) = get_label_from_tao_id(window_id, &context) {
                     let mut windows = self.windows.lock().unwrap();
+                    if !windows.contains_key(&label) {
+                        let mut staging_window = self.staging_window.lock().unwrap();
+                        let staging_lable_opt = staging_window.window.as_ref()
+                            .map(|(l, _w)| l.clone());
+                        if let Some(staging_label) = staging_lable_opt {
+                            if label == staging_label {
+                                // extract the window from the staging window
+                                let (label, window) = staging_window.window.take().unwrap();
+                                windows.insert(label, window);
+                            }
+                        }
+                    }
                     if let Some(egui_win) = windows.get_mut(&label) {
                         // Get the egui context from the EguiWindow
                         let raw_input = egui_win.take_egui_input();
@@ -175,10 +275,12 @@ impl<T: UserEvent> Plugin<T> for EguiPlugin<T> {
 
 /// A collection egui context, renderer and a UI function
 struct EguiWindow {
+    label: String,
     context: egui::Context,
     renderer: Renderer,
     size: PhysicalSize<u32>,
     ui_fn: Box<dyn FnMut(&egui::Context)>,
+    on_destroy: Option<Box<dyn FnMut(String)>>,
     start_time: Instant,
     egui_input: egui::RawInput,
     pointer_pos: Option<egui::Pos2>,
@@ -255,6 +357,19 @@ impl EguiWindow {
                 true
             }
             TaoWindowEvent::KeyboardInput { event, .. } => self.handle_keyboard_event(event),
+            TaoWindowEvent::ReceivedImeText(txt) => {
+                self.egui_input.events.push(egui::Event::Text(txt.to_string()));
+                true
+            }
+            TaoWindowEvent::Moved(phy_pos) => {
+                false
+            }
+            TaoWindowEvent::ScaleFactorChanged { scale_factor, .. } => {
+                self.scale_factor = *scale_factor as f32;
+                self.context.set_pixels_per_point(self.scale_factor);
+                self.context.request_repaint();
+                false 
+            }
             _ => false,
         }
     }
@@ -370,6 +485,8 @@ impl EguiWindow {
                 self.size.height as f32 / self.scale_factor,
             ),
         ));
+        let max_texture_side = wgpu::Limits::default().max_texture_dimension_2d as usize;
+        input.max_texture_side = Some(max_texture_side);
         input
     }
 }
@@ -507,6 +624,7 @@ pub trait AppHandleExt {
         &self,
         label: &str,
         ui_fn: Box<dyn FnMut(&egui::Context)>,
+        on_destroy: Option<Box<dyn FnMut(String)>>,
     ) -> Result<(), Error>;
 }
 
@@ -515,12 +633,8 @@ impl AppHandleExt for AppHandle {
         &self,
         label: &str,
         ui_fn: Box<dyn FnMut(&egui::Context)>,
+        on_destroy: Option<Box<dyn FnMut(String)>>,
     ) -> Result<(), Error> {
-        // check if plugin is init'd
-        let egui_windows = self
-            .try_state::<EguiWindowMap>()
-            .ok_or(Error::msg("TauriPluginEgui is not initialized"))?;
-
         // check if window exists
         let window = self
             .get_window(label)
@@ -539,14 +653,21 @@ impl AppHandleExt for AppHandle {
                 async move { Renderer::new(window, width, height).await },
             )?;
 
+        // check if plugin is init'd
+        let staging_window= self
+            .try_state::<StagingWindow>()
+            .ok_or(Error::msg("TauriPluginEgui is not initialized"))?;
+
         // track in the plugin state
-        let mut managed_windows = egui_windows.lock().unwrap();
-        managed_windows.insert(
+        let mut stage_window = staging_window.lock().unwrap();
+        stage_window.window = Some((
             label.to_string(),
             EguiWindow {
+                label: label.to_string(),
                 context,
                 renderer,
                 ui_fn,
+                on_destroy,
                 size,
                 start_time: Instant::now(),
                 egui_input: egui::RawInput::default(),
@@ -554,7 +675,7 @@ impl AppHandleExt for AppHandle {
                 scale_factor,
                 modifiers: egui::Modifiers::NONE,
             },
-        );
+        ));
 
         Ok(())
     }
