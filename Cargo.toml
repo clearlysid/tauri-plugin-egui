@@ -16,6 +16,7 @@ anyhow = "1.0.98"
 wgpu = "25"
 egui = "0.32"
 egui-wgpu = "0.32"
+arboard = "3"
 
 [build-dependencies]
 tauri-plugin = { version = "2.3.0", features = ["build"] }

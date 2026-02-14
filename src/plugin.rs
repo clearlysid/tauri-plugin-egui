@@ -1,26 +1,47 @@
-use anyhow::Error;
-use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
-use std::time::Instant;
-
-use tauri::{AppHandle, Manager, PhysicalSize};
-use tauri_runtime::window::CursorIcon;
-use tauri_runtime::UserEvent;
-
-use tauri_runtime_wry::{Context, PluginBuilder, WindowMessage};
-use tauri_runtime_wry::{EventLoopIterationContext, Message, Plugin, WebContextStore};
-
-use tauri_runtime_wry::tao::event::{
-    ElementState, Event, KeyEvent, MouseButton, MouseScrollDelta, WindowEvent as TaoWindowEvent,
+use std::{
+    cell::RefCell,
+    collections::HashMap,
+    sync::{Arc, Mutex},
+    time::Instant,
 };
-use tauri_runtime_wry::tao::event_loop::{ControlFlow, EventLoopProxy, EventLoopWindowTarget};
-use tauri_runtime_wry::tao::keyboard::{Key, KeyCode};
 
-use crate::renderer::Renderer;
-use crate::utils::{get_id_from_tao_id, get_label_from_tao_id};
+use anyhow::Error;
+use egui::output::OutputCommand;
+use tauri::{AppHandle, Manager, PhysicalSize};
+use tauri_runtime::{window::CursorIcon, UserEvent};
+use tauri_runtime_wry::{
+    tao::{
+        event::{
+            ElementState,
+            Event,
+            KeyEvent,
+            MouseButton,
+            MouseScrollDelta,
+            WindowEvent as TaoWindowEvent,
+        },
+        event_loop::{ControlFlow, EventLoopProxy, EventLoopWindowTarget},
+        keyboard::{Key, KeyCode},
+    },
+    Context,
+    EventLoopIterationContext,
+    Message,
+    Plugin,
+    PluginBuilder,
+    WebContextStore,
+    WindowMessage,
+};
+
+use crate::{
+    renderer::Renderer,
+    utils::{get_id_from_tao_id, get_label_from_tao_id},
+};
 
 /// A map of EguiWindow instances, keyed by their Tauri window label.
 type EguiWindowMap = Arc<Mutex<HashMap<String, EguiWindow>>>;
+
+thread_local! {
+    static CLIPBOARD: RefCell<Option<arboard::Clipboard>> = const { RefCell::new(None) };
+}
 
 // The builder pattern is mandatorily needed for a Tauri `.wry_plugin()`
 // It sets up the tauri state + offers a hook into the event system
@@ -45,7 +66,7 @@ impl<T: UserEvent> PluginBuilder<T> for Builder {
 }
 
 pub struct EguiPlugin<T: UserEvent> {
-    windows: EguiWindowMap,
+    windows:  EguiWindowMap,
     _phantom: std::marker::PhantomData<T>, // this does nothing, just keeps compiler happy
 }
 
@@ -142,7 +163,7 @@ impl<T: UserEvent> Plugin<T> for EguiPlugin<T> {
                         let height = egui_win.size.height;
 
                         let screen_descriptor = egui_wgpu::ScreenDescriptor {
-                            size_in_pixels: [width, height],
+                            size_in_pixels:   [width, height],
                             pixels_per_point: pixels_per_point,
                         };
 
@@ -175,21 +196,49 @@ impl<T: UserEvent> Plugin<T> for EguiPlugin<T> {
 
 /// A collection egui context, renderer and a UI function
 struct EguiWindow {
-    context: egui::Context,
-    renderer: Renderer,
-    size: PhysicalSize<u32>,
-    ui_fn: Box<dyn FnMut(&egui::Context)>,
-    start_time: Instant,
-    egui_input: egui::RawInput,
-    pointer_pos: Option<egui::Pos2>,
+    context:      egui::Context,
+    renderer:     Renderer,
+    size:         PhysicalSize<u32>,
+    ui_fn:        Box<dyn FnMut(&egui::Context)>,
+    start_time:   Instant,
+    egui_input:   egui::RawInput,
+    pointer_pos:  Option<egui::Pos2>,
     scale_factor: f32,
-    modifiers: egui::Modifiers,
+    modifiers:    egui::Modifiers,
 }
 
 unsafe impl Send for EguiWindow {}
 unsafe impl Sync for EguiWindow {}
 
 impl EguiWindow {
+    fn update_modifiers_from_key_event(&mut self, event: &KeyEvent) {
+        let pressed = event.state == ElementState::Pressed;
+        match &event.logical_key {
+            Key::Shift => {
+                self.modifiers.shift = pressed;
+            }
+            Key::Control => {
+                self.modifiers.ctrl = pressed;
+                #[cfg(not(target_os = "macos"))]
+                {
+                    self.modifiers.command = pressed;
+                }
+            }
+            Key::Alt => {
+                self.modifiers.alt = pressed;
+            }
+            Key::Super => {
+                #[cfg(target_os = "macos")]
+                {
+                    self.modifiers.mac_cmd = pressed;
+                    self.modifiers.command = pressed;
+                }
+            }
+            _ => {}
+        }
+        self.egui_input.modifiers = self.modifiers;
+    }
+
     fn handle_event(&mut self, event: &TaoWindowEvent) -> bool {
         match event {
             TaoWindowEvent::CursorMoved { position, .. } => {
@@ -248,8 +297,8 @@ impl EguiWindow {
                     _ => (0.0, 0.0),
                 };
                 self.egui_input.events.push(egui::Event::MouseWheel {
-                    unit: egui::MouseWheelUnit::Point,
-                    delta: egui::Vec2::new(x, y),
+                    unit:      egui::MouseWheelUnit::Point,
+                    delta:     egui::Vec2::new(x, y),
                     modifiers: self.modifiers,
                 });
                 true
@@ -262,27 +311,78 @@ impl EguiWindow {
     fn handle_keyboard_event(&mut self, event: &KeyEvent) -> bool {
         let pressed = event.state == ElementState::Pressed;
         let mut handled = false;
+        self.update_modifiers_from_key_event(event);
+
+        let logical_key = translate_logical_key(&event.logical_key);
+        let physical_key = translate_physical_key(&event.physical_key);
+        let resolved_key = logical_key.or(physical_key);
+
+        // Translate common command shortcuts into egui clipboard events.
+        if pressed && self.modifiers.command {
+            match resolved_key {
+                Some(egui::Key::C) => {
+                    self.egui_input.events.push(egui::Event::Copy);
+                    return true;
+                }
+                Some(egui::Key::X) => {
+                    self.egui_input.events.push(egui::Event::Cut);
+                    return true;
+                }
+                Some(egui::Key::V) => {
+                    if let Some(text) = read_clipboard_text() {
+                        self.egui_input.events.push(egui::Event::Paste(text));
+                    }
+                    return true;
+                }
+                _ => {}
+            }
+        }
 
         // Handle text input from the text field
-        if pressed {
-            if let Some(text) = &event.text {
-                if !text.is_empty() {
-                    // Filter out control characters
-                    let filtered: String = text
-                        .chars()
-                        .filter(|c| !c.is_control() || *c == '\t' || *c == '\n' || *c == '\r')
-                        .collect();
-
-                    if !filtered.is_empty() {
-                        self.egui_input.events.push(egui::Event::Text(filtered));
-                        handled = true;
+        if pressed && !self.modifiers.command {
+            let mut text_source = event
+                .text
+                .as_deref()
+                .filter(|text| !text.is_empty())
+                .map(str::to_owned)
+                .or_else(|| match &event.logical_key {
+                    Key::Character(ch) if !ch.is_empty() => {
+                        let mut text = (*ch).to_string();
+                        if self.modifiers.shift
+                            && text.len() == 1
+                            && text.as_bytes()[0].is_ascii_lowercase()
+                        {
+                            text.make_ascii_uppercase();
+                        }
+                        Some(text)
                     }
+                    _ => None,
+                });
+
+            if let Some(text) = text_source.as_mut() {
+                if self.modifiers.shift
+                    && text.len() == 1
+                    && text.as_bytes()[0].is_ascii_lowercase()
+                {
+                    text.make_ascii_uppercase();
+                }
+            }
+
+            if let Some(text) = text_source {
+                let filtered: String = text
+                    .chars()
+                    .filter(|c| !c.is_control() || *c == '\t' || *c == '\n' || *c == '\r')
+                    .collect();
+
+                if !filtered.is_empty() {
+                    self.egui_input.events.push(egui::Event::Text(filtered));
+                    handled = true;
                 }
             }
         }
 
         // Handle key events (logical key first, then physical key fallback)
-        if let Some(key) = translate_logical_key(&event.logical_key) {
+        if let Some(key) = logical_key {
             self.egui_input.events.push(egui::Event::Key {
                 key,
                 physical_key: None,
@@ -291,10 +391,10 @@ impl EguiWindow {
                 modifiers: self.modifiers,
             });
             handled = true;
-        } else if let Some(key) = translate_physical_key(&event.physical_key) {
+        } else if let Some(key) = physical_key {
             self.egui_input.events.push(egui::Event::Key {
                 key,
-                physical_key: None,
+                physical_key: Some(key),
                 pressed,
                 repeat: event.repeat,
                 modifiers: self.modifiers,
@@ -325,12 +425,10 @@ impl EguiWindow {
         // Handle commands (clipboard, URL opening, etc.)
         for command in &platform_output.commands {
             match command {
-                egui::output::OutputCommand::CopyText(text) => {
-                    // TODO: Set clipboard content
-                    // For now, just print to console as a placeholder
-                    println!("Clipboard copy text requested: {}", text);
+                OutputCommand::CopyText(text) => {
+                    let _ = write_clipboard_text(text);
                 }
-                egui::output::OutputCommand::CopyImage(image) => {
+                OutputCommand::CopyImage(image) => {
                     // TODO: Set clipboard image content
                     // For now, just print to console as a placeholder
                     println!(
@@ -339,7 +437,7 @@ impl EguiWindow {
                         image.height()
                     );
                 }
-                egui::output::OutputCommand::OpenUrl(url) => {
+                OutputCommand::OpenUrl(url) => {
                     // TODO: Open URL in default browser
                     // For now, just print to console as a placeholder
                     println!(
@@ -372,6 +470,26 @@ impl EguiWindow {
         ));
         input
     }
+}
+
+fn with_clipboard<R>(
+    f: impl FnOnce(&mut arboard::Clipboard) -> Result<R, arboard::Error>,
+) -> Result<R, arboard::Error> {
+    CLIPBOARD.with(|clipboard| {
+        let mut clipboard = clipboard.borrow_mut();
+        if clipboard.is_none() {
+            *clipboard = Some(arboard::Clipboard::new()?);
+        }
+        f(clipboard.as_mut().expect("clipboard must be initialized"))
+    })
+}
+
+fn read_clipboard_text() -> Option<String> {
+    with_clipboard(|clipboard| clipboard.get_text()).ok()
+}
+
+fn write_clipboard_text(text: &str) -> Result<(), arboard::Error> {
+    with_clipboard(|clipboard| clipboard.set_text(text.to_string()))
 }
 
 fn translate_logical_key(key: &Key) -> Option<egui::Key> {
